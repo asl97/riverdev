@@ -363,12 +363,15 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	local x0 = minp.x
 	local y0 = minp.y
 	local z0 = minp.z
-	
+
 	print ("[riverdev] generate chunk minp ("..x0.." "..y0.." "..z0..")")
-	
+	local base = collectgarbage("count")
 	local vm, emin, emax = minetest.get_mapgen_object("voxelmanip")
 	local area = VoxelArea:new{MinEdge=emin, MaxEdge=emax}
+	local o1 = os.clock()
 	local data = vm:get_data()
+	local o2 = os.clock()
+	local mem1 = collectgarbage("count")
 	
 	local c_air = minetest.get_content_id("air")
 	local c_ignore = minetest.get_content_id("ignore")
@@ -400,7 +403,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	local c_freshwaterflow = minetest.get_content_id("riverdev:freshwaterflow")
 	local c_mixwaterflow = minetest.get_content_id("riverdev:mixwaterflow")
 	local c_permafrost = minetest.get_content_id("riverdev:permafrost")
-	
+	local mem2 = collectgarbage("count")
 	local sidelen = x1 - x0 + 1 -- mapgen chunk side length
 	local overlen = sidelen + 1 -- perlinmap overgeneration horizontal side length
 	local emerlen = sidelen + 32 -- voxelmanip emerged volume edge length
@@ -410,6 +413,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	local chulensxz = {x=overlen, y=overlen, z=1} -- different because here x=x, y=z
 	local minposxz = {x=x0-1, y=z0-1}
 	-- 3D and 2D noise objects created once on first mapchunk generation only
+	local mem3 = collectgarbage("count")
 	nobj_terrain    = nobj_terrain    or minetest.get_perlin_map(np_terrain, chulensxyz)
 	nobj_terrainalt = nobj_terrainalt or minetest.get_perlin_map(np_terrainalt, chulensxyz)
 	nobj_temp       = nobj_temp       or minetest.get_perlin_map(np_temp, chulensxyz)
@@ -428,6 +432,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	nobj_tree       = nobj_tree       or minetest.get_perlin_map(np_tree, chulensxz)
 	nobj_grass      = nobj_grass      or minetest.get_perlin_map(np_grass, chulensxz)
 	-- 3D and 2D perlinmaps created per mapchunk
+	local mem4 = collectgarbage("count")
 	local nvals_terrain    = nobj_terrain:get3dMap_flat(minposxyz)
 	local nvals_terrainalt = nobj_terrainalt:get3dMap_flat(minposxyz)
 	local nvals_temp       = nobj_temp:get3dMap_flat(minposxyz)
@@ -438,7 +443,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	local nvals_webe       = nobj_webe:get3dMap_flat(minposxyz)
 	local nvals_fissure    = nobj_fissure:get3dMap_flat(minposxyz)
 	local nvals_strata     = nobj_strata:get3dMap_flat(minposxyz)
-
+	local mem5 = collectgarbage("count")
 	local nvals_mid        = nobj_mid:get2dMap_flat(minposxz)
 	local nvals_base       = nobj_base:get2dMap_flat(minposxz)
 	local nvals_humid      = nobj_base:get2dMap_flat({x=x0-1, y=z0+383})
@@ -446,6 +451,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	local nvals_pathb      = nobj_pathb:get2dMap_flat(minposxz)
 	local nvals_tree       = nobj_tree:get2dMap_flat(minposxz)
 	local nvals_grass      = nobj_grass:get2dMap_flat(minposxz)
+	local mem6 = collectgarbage("count")
 	-- ungenerated chunk below?
 	local viu = area:index(x0, y0-1, z0)
 	local ungen = data[viu] == c_ignore
@@ -454,6 +460,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	local nixz = 1
 	local stable = {}
 	local under = {}
+	local o3 = os.clock()
 	for z = z0 - 1, z1 do
 	for y = y0 - 1, y1 + 1 do
 		local si = 1
@@ -713,13 +720,47 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	end
 	nixz = nixz + overlen
 	end
-	
+	local o4 = os.clock()
+	local mem7 = collectgarbage("count")
 	vm:set_data(data)
+	local o5 = os.clock()
 	vm:calc_lighting()
+	local o6 = os.clock()
 	vm:write_to_map(data)
+	local o7 = os.clock()
 	vm:update_liquids()
+	local o8 = os.clock()
 
-	local chugent = math.ceil((os.clock() - t0) * 1000)
-	print ("[riverdev] "..chugent.." ms")
+	print("[data usage]")
+	print("[riverdev data]: "..mem1-base)
+	print("[riverdev content]: "..mem2-mem1)
+	print("[riverdev variable stuff]: "..mem3-mem2)
+	print("[riverdev noise]: "..mem4-mem3)
+	print("[riverdev 3d noise view]: "..mem5-mem4)
+	print("[riverdev 2d noise view]: "..mem6-mem5)
+	print("    [riverdev noise view total]: "..mem6-mem4)
+	print("[riverdev mapgen]: "..mem7-mem6)
+	print("[riverdev total]: "..mem7-base)
+	print("[lua memory usage]: "..collectgarbage("count"))
+	print()
+	print("[timing]")
+	local tgetdata = (o2-o1)*1000
+	local tgetnoise = (o3-o2)*1000
+	local tmapgen = (o4-o3)*1000
+	local tsetdata = (o5-o4)*1000
+	local tlighting = (o6-o5)*1000
+	local twrite = (o7-o6)*1000
+	local tliquids = (o8-o7)*1000
+	local ttotal = (o8-o1)*1000
+	print("[riverdev get data] "..tgetdata.." ms")
+	print("[riverdev get noise] "..tgetnoise.." ms")
+	print("[riverdev lua mapgen] "..tmapgen.." ms")
+	print("[riverdev set data] "..tsetdata.." ms")
+	print("[riverdev lighting] "..tlighting.." ms")
+	print("[riverdev write] "..twrite.." ms")
+	print("[riverdev liquids] "..tliquids.." ms")
+	print("[riverdev total] "..ttotal.." ms")
+	print()
+	print()
 end)
 
